@@ -651,12 +651,8 @@ def switch_model(model_id):
             'available_models': list(AVAILABLE_MODELS.keys())
         }), 400
     
-    if model_id not in predictors:
-        return jsonify({
-            'success': False,
-            'error': 'Model not loaded',
-            'details': f'{AVAILABLE_MODELS[model_id]["name"]} failed to load on startup'
-        }), 503
+    # In Vercel serverless functions, predictors might be cleared due to cold starts,
+    # so we shouldn't immediately return a 503 if the model isn't in memory yet.
     
     old_model = current_model
     
