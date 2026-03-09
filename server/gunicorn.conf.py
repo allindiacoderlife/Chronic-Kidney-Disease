@@ -7,11 +7,14 @@ bind = f"0.0.0.0:{os.getenv('PORT', '5000')}"
 backlog = 2048
 
 # Worker processes
-workers = multiprocessing.cpu_count() * 2 + 1
-worker_class = 'sync'
+# To avoid Out of Memory (OOM) errors on free tiers, hardcode to 1 worker
+workers = int(os.getenv('WEB_CONCURRENCY', '1'))
+worker_class = 'gthread'
+threads = 2
 worker_connections = 1000
 timeout = 30
 keepalive = 2
+preload_app = True
 
 # Logging
 accesslog = '-'

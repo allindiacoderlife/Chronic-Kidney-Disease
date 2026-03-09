@@ -86,15 +86,18 @@ def initialize_all_models():
     """Initialize all available models."""
     global predictors, current_model
     
-    logger.info("Initializing all models...")
+    logger.info("Initializing models...")
     
-    for model_key, model_config in AVAILABLE_MODELS.items():
-        predictor = initialize_predictor(model_config['type'], use_calibrated=True)
-        if predictor:
-            predictors[model_key] = predictor
-            logger.info(f"✓ {model_config['name']} ready")
-        else:
-            logger.warning(f"⚠ {model_config['name']} failed to load")
+    # FOR RENDER FREE TIER: Only load the default model to save memory
+    default_model = 'logistic_regression'
+    model_config = AVAILABLE_MODELS[default_model]
+    
+    predictor = initialize_predictor(model_config['type'], use_calibrated=True)
+    if predictor:
+        predictors[default_model] = predictor
+        logger.info(f"✓ {model_config['name']} ready")
+    else:
+        logger.warning(f"⚠ {model_config['name']} failed to load")
     
     # Set default model
     if 'logistic_regression' in predictors:
@@ -102,7 +105,7 @@ def initialize_all_models():
     elif predictors:
         current_model = list(predictors.keys())[0]
     
-    logger.info(f"✓ Initialized {len(predictors)}/{len(AVAILABLE_MODELS)} models")
+    logger.info(f"✓ Initialized {len(predictors)} models (limited for memory)")
     logger.info(f"✓ Current model: {current_model}")
 
 
@@ -111,7 +114,7 @@ def get_current_predictor():
     return predictors.get(current_model)
 
 
-# Initialize all models on startup
+# Initialize models on startup
 initialize_all_models()
 
 
@@ -676,6 +679,25 @@ def switch_model(model_id):
         }), 503
     
     old_model = current_model
+    
+    # Lazy load if not already in memory
+    if model_id not in predictors:
+        logger.info(f"Loading model {model_id} into memory...")
+        predictor = initialize_predictor(AVAILABLE_MODELS[model_id]['type'], use_calibrated=True)
+        if predictor:
+            predictors[model_id] = predictor
+            
+            # To aggressively save memory, remove the old model from RAM
+            # ONLY doing this because of Render's 512mb strict limits
+            if old_model in predictors and old_model != model_id:
+                del predictors[old_model]
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to load model',
+                'details': f'Could not initialize {AVAILABLE_MODELS[model_id]["name"]}'
+            }), 500
+
     current_model = model_id
     predictor = get_current_predictor()
     
@@ -693,52 +715,11 @@ def switch_model(model_id):
 @app.route('/models/compare', methods=['POST'])
 def compare_models():
     """Compare predictions across all models for the same input."""
-    try:
-        # Get JSON data
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
-        
-        comparisons = []
-        
-        for model_key, predictor in predictors.items():
-            try:
-                results = predictor.predict_single(data)
-                comparisons.append({
-                    'model_id': model_key,
-                    'model_name': AVAILABLE_MODELS[model_key]['name'],
-                    'prediction': results['prediction'],
-                    'confidence': round(results['confidence'], 4),
-                    'probabilities': {
-                        'ckd': round(results['probability_ckd'], 4),
-                        'not_ckd': round(results['probability_not_ckd'], 4)
-                    }
-                })
-            except Exception as e:
-                comparisons.append({
-                    'model_id': model_key,
-                    'model_name': AVAILABLE_MODELS[model_key]['name'],
-                    'error': str(e)
-                })
-        
-        return jsonify({
-            'success': True,
-            'total_models': len(comparisons),
-            'comparisons': comparisons,
-            'timestamp': datetime.now().isoformat()
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Comparison error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Comparison failed',
-            'details': str(e)
-        }), 500
+    return jsonify({
+        'success': False,
+        'error': 'Disabled to conserve memory',
+        'details': 'Feature disabled on Render Free Tier to avoid Out Of Memory errors resulting from concurrently loading multiple heavy machine learning models.'
+    }), 503
 
 
 @app.errorhandler(404)
