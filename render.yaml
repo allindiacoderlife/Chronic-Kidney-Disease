@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: ckd-backend
+    env: docker
+    dockerContext: ./server
+    dockerfilePath: ./server/Dockerfile
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      # Update this once the frontend is deployed
+      - key: CORS_ORIGINS
+        value: https://ckd-frontend.onrender.com
+    
+  - type: web
+    name: ckd-frontend
+    env: docker
+    dockerContext: ./client
+    dockerfilePath: ./client/Dockerfile
+    envVars:
+      # Update this once the backend is deployed
+      - key: VITE_API_URL
+        value: https://ckd-backend.onrender.com
