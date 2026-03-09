@@ -34,26 +34,6 @@ AVAILABLE_MODELS = {
         'name': 'Logistic Regression',
         'type': 'logistic_regression',
         'description': 'Linear model with probability calibration'
-    },
-    'random_forest': {
-        'name': 'Random Forest',
-        'type': 'random_forest',
-        'description': 'Ensemble of decision trees'
-    },
-    'xgboost': {
-        'name': 'XGBoost',
-        'type': 'xgboost',
-        'description': 'Gradient boosting framework'
-    },
-    'lightgbm': {
-        'name': 'LightGBM',
-        'type': 'lightgbm',
-        'description': 'Fast gradient boosting'
-    },
-    'mlp': {
-        'name': 'Neural Network (MLP)',
-        'type': 'mlp',
-        'description': 'Multi-layer perceptron'
     }
 }
 
