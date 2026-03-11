@@ -30,11 +30,11 @@ current_model = 'logistic_regression'
 
 # Available models configuration
 AVAILABLE_MODELS = {
-    'random_forest': {
-        'name': 'Random Forest',
-        'type': 'random_forest',
-        'description': 'Ensemble tree model supporting multiclass classification'
-    },
+    # 'random_forest': {
+    #     'name': 'Random Forest',
+    #     'type': 'random_forest',
+    #     'description': 'Ensemble tree model supporting multiclass classification'
+    # },
     'logistic_regression': {
         'name': 'Logistic Regression',
         'type': 'logistic_regression',
