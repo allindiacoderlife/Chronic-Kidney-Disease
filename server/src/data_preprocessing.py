@@ -456,7 +456,7 @@ def main():
         os.path.dirname(os.path.dirname(__file__)),
         'data',
         'raw',
-        'kidney_disease.csv'
+        'kidney_disease_dataset.csv'
     )
     
     # Create preprocessor instance

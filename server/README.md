@@ -72,7 +72,7 @@ python src/data_preprocessing.py
 from src.data_preprocessing import CKDDataPreprocessor
 
 # Initialize preprocessor
-preprocessor = CKDDataPreprocessor('data/raw/kidney_disease.csv')
+preprocessor = CKDDataPreprocessor('data/raw/kidney_disease_dataset.csv')
 
 # Run full pipeline
 preprocessor.run_full_pipeline(
@@ -104,7 +104,7 @@ server/
 ├── api/                            # API related code
 ├── data/                           # Datasets
 │   ├── raw/                        # Original datasets
-│   │   └── kidney_disease.csv      
+│   │   └── kidney_disease_dataset.csv      
 │   └── processed/                  # Cleaned datasets
 │       └── kidney_disease_cleaned.csv  
 ├── models/                         # Saved model artifacts
@@ -116,7 +116,7 @@ server/
 
 ## Dataset Information
 
-The Chronic Kidney Disease dataset contains the following features:
+The model is trained on the `kidney_disease_dataset.csv` dataset. The Chronic Kidney Disease dataset contains the following features:
 
 **Numerical Features:**
 - age, bp (blood pressure), sg (specific gravity), al (albumin), su (sugar)

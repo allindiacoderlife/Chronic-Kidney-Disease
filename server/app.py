@@ -30,15 +30,35 @@ current_model = 'logistic_regression'
 
 # Available models configuration
 AVAILABLE_MODELS = {
+    'random_forest': {
+        'name': 'Random Forest',
+        'type': 'random_forest',
+        'description': 'Ensemble tree model supporting multiclass classification'
+    },
     'logistic_regression': {
         'name': 'Logistic Regression',
         'type': 'logistic_regression',
         'description': 'Linear model with probability calibration'
+    },
+    'xgboost': {
+        'name': 'XGBoost',
+        'type': 'xgboost',
+        'description': 'Optimized distributed gradient boosting library'
+    },
+    'lightgbm': {
+        'name': 'LightGBM',
+        'type': 'lightgbm',
+        'description': 'Light Gradient Boosting Machine supporting high efficiency'
+    },
+    'mlp': {
+        'name': 'Multi-Layer Perceptron',
+        'type': 'mlp',
+        'description': 'Neural network supporting complex non-linear relations'
     }
 }
 
 
-def initialize_predictor(model_type='logistic_regression', use_calibrated=True):
+def initialize_predictor(model_type='random_forest', use_calibrated=True):
     """
     Initialize a predictor with specified model.
     
@@ -50,7 +70,7 @@ def initialize_predictor(model_type='logistic_regression', use_calibrated=True):
         CKDPredictor instance or None
     """
     try:
-        predictor = CKDPredictor(model_dir='models')
+        predictor = CKDPredictor(model_dir='data/models')
         predictor.load_model(
             model_type=model_type,
             use_calibrated=use_calibrated
@@ -69,9 +89,13 @@ def initialize_all_models():
     logger.info("Initializing models...")
     
     # FOR RENDER FREE TIER: Only load the default model to save memory
-    default_model = 'logistic_regression'
-    model_config = AVAILABLE_MODELS[default_model]
+    default_model = current_model
+    model_config = AVAILABLE_MODELS.get(default_model)
     
+    if not model_config:
+        logger.error(f"Default model {default_model} not found in available configurations")
+        return
+        
     predictor = initialize_predictor(model_config['type'], use_calibrated=True)
     if predictor:
         predictors[default_model] = predictor
@@ -80,8 +104,8 @@ def initialize_all_models():
         logger.warning(f"⚠ {model_config['name']} failed to load")
     
     # Set default model
-    if 'logistic_regression' in predictors:
-        current_model = 'logistic_regression'
+    if 'random_forest' in predictors:
+        current_model = 'random_forest'
     elif predictors:
         current_model = list(predictors.keys())[0]
     
@@ -415,10 +439,7 @@ def predict():
             'success': True,
             'prediction': results['prediction'],
             'predicted_class': results['predicted_class'],
-            'probabilities': {
-                'ckd': round(results['probability_ckd'], 4),
-                'not_ckd': round(results['probability_not_ckd'], 4)
-            },
+            'probabilities': {k: round(v, 4) for k, v in results['probabilities'].items()},
             'confidence': round(results['confidence'], 4),
             'model': results['model'],
             'timestamp': datetime.now().isoformat()
@@ -486,10 +507,7 @@ def predict_batch():
                     'index': i,
                     'success': True,
                     'prediction': result['prediction'],
-                    'probabilities': {
-                        'ckd': round(result['probability_ckd'], 4),
-                        'not_ckd': round(result['probability_not_ckd'], 4)
-                    },
+                    'probabilities': {k: round(v, 4) for k, v in result['probabilities'].items()},
                     'confidence': round(result['confidence'], 4)
                 })
             except Exception as e:
@@ -536,7 +554,7 @@ def model_info():
         }), 503
     
     # Load results if available
-    results_files = glob.glob(os.path.join('models', 'results_*.json'))
+    results_files = glob.glob(os.path.join('data', 'models', 'results_*.json'))
     performance = None
     
     if results_files:
@@ -619,7 +637,7 @@ def list_models():
         }
         
         # Add performance metrics if available
-        results_files = glob.glob(os.path.join('models', 'results_*.json'))
+        results_files = glob.glob(os.path.join('data', 'models', 'results_*.json'))
         if results_files and predictor:
             import json
             results_path = sorted(results_files)[-1]

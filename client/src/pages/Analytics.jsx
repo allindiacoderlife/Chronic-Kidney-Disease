@@ -34,19 +34,22 @@ const Analytics = () => {
   ]
 
   const predictionDistribution = [
-    { name: 'CKD Cases', value: 250, color: '#ef4444' },
-    { name: 'Non-CKD', value: 150, color: '#10b981' },
+    { name: 'No Disease', value: 320, color: '#10b981' },
+    { name: 'Low Risk', value: 85, color: '#3b82f6' },
+    { name: 'Moderate Risk', value: 45, color: '#f59e0b' },
+    { name: 'High Risk', value: 30, color: '#f97316' },
+    { name: 'Severe Disease', value: 20, color: '#ef4444' },
   ]
 
   const featureImportance = [
-    { feature: 'Serum Creatinine', importance: 95 },
-    { feature: 'Blood Urea', importance: 88 },
-    { feature: 'Hemoglobin', importance: 82 },
-    { feature: 'Specific Gravity', importance: 75 },
-    { feature: 'Albumin', importance: 70 },
-    { feature: 'Age', importance: 65 },
-    { feature: 'Blood Pressure', importance: 60 },
-    { feature: 'Hypertension', importance: 55 },
+    { feature: 'Serum Creatinine', importance: 98 },
+    { feature: 'Hemoglobin', importance: 92 },
+    { feature: 'Specific Gravity', importance: 85 },
+    { feature: 'Blood Urea', importance: 78 },
+    { feature: 'Albumin', importance: 74 },
+    { feature: 'Hypertension', importance: 68 },
+    { feature: 'Diabetes Mellitus', importance: 65 },
+    { feature: 'Packed Cell Volume', importance: 58 },
   ]
 
   const confidenceDistribution = [
@@ -57,12 +60,12 @@ const Analytics = () => {
   ]
 
   const monthlyTrends = [
-    { month: 'Jan', ckd: 65, nonCkd: 35, total: 100 },
-    { month: 'Feb', ckd: 70, nonCkd: 40, total: 110 },
-    { month: 'Mar', ckd: 75, nonCkd: 45, total: 120 },
-    { month: 'Apr', ckd: 68, nonCkd: 42, total: 110 },
-    { month: 'May', ckd: 72, nonCkd: 48, total: 120 },
-    { month: 'Jun', ckd: 80, nonCkd: 50, total: 130 },
+    { month: 'Jan', healthy: 45, atRisk: 15, total: 60 },
+    { month: 'Feb', healthy: 52, atRisk: 18, total: 70 },
+    { month: 'Mar', healthy: 48, atRisk: 22, total: 70 },
+    { month: 'Apr', healthy: 60, atRisk: 15, total: 75 },
+    { month: 'May', healthy: 55, atRisk: 25, total: 80 },
+    { month: 'Jun', healthy: 68, atRisk: 12, total: 80 },
   ]
 
   const featureCategories = [
@@ -189,11 +192,16 @@ const Analytics = () => {
               <span className="material-icons text-[#0056b2]/40">verified_user</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">93.8%</h3>
-              <span className="text-emerald-500 text-xs font-medium flex items-center">+0.4%</span>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                {modelInfo?.performance?.accuracy ? (modelInfo.performance.accuracy * 100).toFixed(1) + '%' : '93.8%'}
+              </h3>
+              <span className="text-emerald-500 text-xs font-medium flex items-center">Real-time</span>
             </div>
             <div className="mt-4 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-[#0056b2] h-full w-[93.8%]"></div>
+              <div 
+                className="bg-[#0056b2] h-full transition-all duration-500" 
+                style={{ width: `${modelInfo?.performance?.accuracy ? (modelInfo.performance.accuracy * 100) : 93.8}%` }}
+              ></div>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#0056b2]/10 shadow-sm">
@@ -202,11 +210,16 @@ const Analytics = () => {
               <span className="material-icons text-[#0056b2]/40">legend_toggle</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">0.975</h3>
-              <span className="text-emerald-500 text-xs font-medium flex items-center">Stable</span>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                {modelInfo?.performance?.roc_auc ? modelInfo.performance.roc_auc.toFixed(3) : '0.975'}
+              </h3>
+              <span className="text-emerald-500 text-xs font-medium flex items-center">Real-time</span>
             </div>
             <div className="mt-4 w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-sky-500 h-full w-[97.5%]"></div>
+              <div 
+                className="bg-sky-500 h-full transition-all duration-500" 
+                style={{ width: `${modelInfo?.performance?.roc_auc ? (modelInfo.performance.roc_auc * 100) : 97.5}%` }}
+              ></div>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#0056b2]/10 shadow-sm">
@@ -232,7 +245,9 @@ const Analytics = () => {
               <span className="material-icons text-[#0056b2]/40">account_tree</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">24</h3>
+              <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                {modelInfo?.features_count || '24'}
+              </h3>
               <span className="text-slate-400 text-xs font-medium uppercase">Clinical Parsers</span>
             </div>
             <div className="mt-4 text-[10px] text-slate-500 flex flex-wrap gap-1">
@@ -356,8 +371,8 @@ const Analytics = () => {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Area type="monotone" dataKey="ckd" stackId="1" stroke="#ef4444" fill="#ef4444" name="CKD" />
-                  <Area type="monotone" dataKey="nonCkd" stackId="1" stroke="#10b981" fill="#10b981" name="Non-CKD" />
+                  <Area type="monotone" dataKey="atRisk" stackId="1" stroke="#f97316" fill="#f97316" name="At Risk Cases" />
+                  <Area type="monotone" dataKey="healthy" stackId="1" stroke="#10b981" fill="#10b981" name="Healthy Cases" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>

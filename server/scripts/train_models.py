@@ -52,7 +52,7 @@ def main():
     
     trainer.run_full_pipeline(
         models_to_train='all',
-        use_cv=True,
+        use_cv=False,
         calibrate=True
     )
     

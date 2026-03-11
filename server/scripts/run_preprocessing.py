@@ -18,7 +18,7 @@ def main():
         os.path.dirname(os.path.dirname(__file__)),
         'data',
         'raw',
-        'kidney_disease.csv'
+        'kidney_disease_dataset.csv'
     )
     
     print("\n🚀 Starting Quick Preprocessing (without NLTK text processing)...\n")

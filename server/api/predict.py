@@ -23,7 +23,7 @@ class CKDPredictor:
             model_dir (str): Directory containing saved models
         """
         if model_dir is None:
-            model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+            model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'models')
         self.model_dir = model_dir
         self.model = None
         self.preprocessing = None
@@ -178,11 +178,16 @@ class CKDPredictor:
         predicted_class = predictions[0]
         predicted_label = class_names[predicted_class]
         
+        prob_dict = {}
+        for i, cls_name in enumerate(class_names):
+            # Normalizing the class name to be snake_case
+            prob_key = str(cls_name).lower().replace(' ', '_')
+            prob_dict[prob_key] = float(probabilities[0][i])
+            
         results = {
             'prediction': predicted_label,
             'predicted_class': int(predicted_class),
-            'probability_ckd': float(probabilities[0][0]),
-            'probability_not_ckd': float(probabilities[0][1]),
+            'probabilities': prob_dict,
             'confidence': float(max(probabilities[0])),
             'model': self.model_name
         }
@@ -198,8 +203,8 @@ class CKDPredictor:
         print(f"\n📊 Prediction: {results['prediction']}")
         print(f"   Confidence: {results['confidence']*100:.1f}%")
         print(f"\n📈 Probabilities:")
-        print(f"   CKD:     {results['probability_ckd']*100:.1f}%")
-        print(f"   Not CKD: {results['probability_not_ckd']*100:.1f}%")
+        for cls_name, prob in results['probabilities'].items():
+            print(f"   {cls_name.replace('_', ' ').title()}: {prob*100:.1f}%")
         print("\n" + "=" * 60)
 
 
@@ -294,9 +299,20 @@ def batch_predict_from_csv(csv_path, predictor=None):
     
     # Add results to dataframe
     df['predicted_class'] = predictions
-    df['probability_ckd'] = probabilities[:, 0]
-    df['probability_not_ckd'] = probabilities[:, 1]
     df['confidence'] = probabilities.max(axis=1)
+    
+    # Get class labels for probabilities
+    if predictor.preprocessing and 'label_encoders' in predictor.preprocessing:
+        target_encoder = predictor.preprocessing['label_encoders'].get('target')
+        if target_encoder:
+            class_names = target_encoder.classes_
+            for i, cls_name in enumerate(class_names):
+                prob_key = f"probability_{str(cls_name).lower().replace(' ', '_')}"
+                df[prob_key] = probabilities[:, i]
+    else:
+        # Fallback if no encoder
+        for i in range(probabilities.shape[1]):
+            df[f'probability_class_{i}'] = probabilities[:, i]
     
     # Get class labels
     if predictor.preprocessing and 'label_encoders' in predictor.preprocessing:

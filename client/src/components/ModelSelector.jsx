@@ -160,8 +160,8 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                     isActive
                       ? "ring-2 ring-blue-500 bg-blue-50"
                       : "hover:shadow-lg"
-                  } ${!model.loaded ? "opacity-50" : ""}`}
-                  onClick={() => model.loaded && !isSwitching && switchModel(model.id)}
+                  } ${!model.loaded ? "opacity-75" : ""}`}
+                  onClick={() => !isSwitching && switchModel(model.id)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
@@ -179,9 +179,7 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                           Active
                         </Badge>
                       )}
-                      {!model.loaded && (
-                        <Badge variant="destructive">Not Loaded</Badge>
-                      )}
+                      {/* Removed the 'Not Loaded' badge to avoid UI confusion since models are lazy-loaded now */}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -210,7 +208,7 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                       </div>
                     )}
 
-                    {model.loaded && !isActive && (
+                    {!isActive && (
                       <Button
                         className="w-full mt-3"
                         variant="outline"

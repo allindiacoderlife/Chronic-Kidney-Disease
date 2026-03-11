@@ -80,6 +80,7 @@ class CKDModelTrainer:
         """
         self.data_path = data_path
         self.random_state = random_state
+        self.is_multiclass = False
         self.df = None
         self.X = None
         self.y = None
@@ -152,6 +153,7 @@ class CKDModelTrainer:
         # Convert to numpy arrays
         self.X = X.values
         self.y = y
+        self.is_multiclass = len(np.unique(self.y)) > 2
         
         # Check for NaN values and handle them
         if np.isnan(self.X).any():
@@ -210,7 +212,7 @@ class CKDModelTrainer:
         
         return self
     
-    def train_logistic_regression(self, use_cv=True):
+    def train_logistic_regression(self, use_cv=False):
         """Train Logistic Regression with regularization."""
         print("\n" + "=" * 80)
         print("TRAINING: Logistic Regression (Baseline)")
@@ -219,20 +221,30 @@ class CKDModelTrainer:
         if use_cv:
             print("\n🔍 Using GridSearchCV for hyperparameter tuning...")
             
-            param_grid = {
-                'C': [0.001, 0.01, 0.1, 1, 10, 100],
-                'penalty': ['l1', 'l2'],
-                'solver': ['liblinear', 'saga'],
-                'max_iter': [1000]
-            }
-            
+            if self.is_multiclass:
+                param_grid = {
+                    'C': [0.001, 0.01, 0.1, 1, 10, 100],
+                    'penalty': ['l2'],
+                    'solver': ['lbfgs', 'saga'],
+                    'max_iter': [1000]
+                }
+                scoring = 'roc_auc_ovr'
+            else:
+                param_grid = {
+                    'C': [0.001, 0.01, 0.1, 1, 10, 100],
+                    'penalty': ['l1', 'l2'],
+                    'solver': ['liblinear', 'saga'],
+                    'max_iter': [1000]
+                }
+                scoring = 'roc_auc'
+                
             cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
             
             grid_search = GridSearchCV(
                 LogisticRegression(random_state=self.random_state, class_weight='balanced'),
                 param_grid,
                 cv=cv,
-                scoring='roc_auc',
+                scoring=scoring,
                 n_jobs=-1,
                 verbose=0
             )
@@ -255,7 +267,7 @@ class CKDModelTrainer:
         
         return self
     
-    def train_random_forest(self, use_cv=True):
+    def train_random_forest(self, use_cv=False):
         """Train Random Forest classifier."""
         print("\n" + "=" * 80)
         print("TRAINING: Random Forest")
@@ -280,7 +292,7 @@ class CKDModelTrainer:
                 param_dist,
                 n_iter=20,
                 cv=cv,
-                scoring='roc_auc',
+                scoring='roc_auc_ovr' if self.is_multiclass else 'roc_auc',
                 n_jobs=-1,
                 random_state=self.random_state,
                 verbose=0
@@ -305,7 +317,7 @@ class CKDModelTrainer:
         
         return self
     
-    def train_xgboost(self, use_cv=True):
+    def train_xgboost(self, use_cv=False):
         """Train XGBoost classifier."""
         if not XGBOOST_AVAILABLE:
             print("\n⚠️  XGBoost not available. Skipping...")
@@ -316,7 +328,12 @@ class CKDModelTrainer:
         print("=" * 80)
         
         # Calculate scale_pos_weight for imbalanced data
-        scale_pos_weight = np.sum(self.y_train == 0) / np.sum(self.y_train == 1)
+        xgb_kwargs = {
+            'random_state': self.random_state,
+            'eval_metric': 'mlogloss' if self.is_multiclass else 'logloss'
+        }
+        if not self.is_multiclass:
+            xgb_kwargs['scale_pos_weight'] = np.sum(self.y_train == 0) / np.sum(self.y_train == 1)
         
         if use_cv:
             print("\n🔍 Using RandomizedSearchCV for hyperparameter tuning...")
@@ -334,15 +351,11 @@ class CKDModelTrainer:
             cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
             
             random_search = RandomizedSearchCV(
-                xgb.XGBClassifier(
-                    random_state=self.random_state,
-                    scale_pos_weight=scale_pos_weight,
-                    eval_metric='logloss'
-                ),
+                xgb.XGBClassifier(**xgb_kwargs),
                 param_dist,
                 n_iter=20,
                 cv=cv,
-                scoring='roc_auc',
+                scoring='roc_auc_ovr' if self.is_multiclass else 'roc_auc',
                 n_jobs=-1,
                 random_state=self.random_state,
                 verbose=0
@@ -358,9 +371,7 @@ class CKDModelTrainer:
                 n_estimators=200,
                 max_depth=5,
                 learning_rate=0.1,
-                random_state=self.random_state,
-                scale_pos_weight=scale_pos_weight,
-                eval_metric='logloss'
+                **xgb_kwargs
             )
             model.fit(self.X_train, self.y_train)
         
@@ -369,7 +380,7 @@ class CKDModelTrainer:
         
         return self
     
-    def train_lightgbm(self, use_cv=True):
+    def train_lightgbm(self, use_cv=False):
         """Train LightGBM classifier."""
         if not LIGHTGBM_AVAILABLE:
             print("\n⚠️  LightGBM not available. Skipping...")
@@ -403,7 +414,7 @@ class CKDModelTrainer:
                 param_dist,
                 n_iter=20,
                 cv=cv,
-                scoring='roc_auc',
+                scoring='roc_auc_ovr' if self.is_multiclass else 'roc_auc',
                 n_jobs=-1,
                 random_state=self.random_state,
                 verbose=0
@@ -458,7 +469,7 @@ class CKDModelTrainer:
                 ),
                 param_grid,
                 cv=cv,
-                scoring='roc_auc',
+                scoring='roc_auc_ovr' if self.is_multiclass else 'roc_auc',
                 n_jobs=-1,
                 verbose=0
             )
@@ -487,14 +498,21 @@ class CKDModelTrainer:
         """Evaluate a trained model."""
         # Predictions
         y_pred = model.predict(self.X_test)
-        y_pred_proba = model.predict_proba(self.X_test)[:, 1]
+        
+        if self.is_multiclass:
+            y_pred_proba = model.predict_proba(self.X_test)
+            average = 'macro'
+            roc_auc = roc_auc_score(self.y_test, y_pred_proba, multi_class='ovr')
+        else:
+            y_pred_proba = model.predict_proba(self.X_test)[:, 1]
+            average = 'binary'
+            roc_auc = roc_auc_score(self.y_test, y_pred_proba)
         
         # Calculate metrics
         accuracy = accuracy_score(self.y_test, y_pred)
-        precision = precision_score(self.y_test, y_pred, average='binary')
-        recall = recall_score(self.y_test, y_pred, average='binary')
-        f1 = f1_score(self.y_test, y_pred, average='binary')
-        roc_auc = roc_auc_score(self.y_test, y_pred_proba)
+        precision = precision_score(self.y_test, y_pred, average=average)
+        recall = recall_score(self.y_test, y_pred, average=average)
+        f1 = f1_score(self.y_test, y_pred, average=average)
         
         # Store results
         self.results[model_name] = {
@@ -549,16 +567,17 @@ class CKDModelTrainer:
             
             # Evaluate calibrated model
             y_pred_calib = calibrated.predict(self.X_test)
-            y_pred_proba_calib = calibrated.predict_proba(self.X_test)[:, 1]
             
-            # Calculate Brier score (lower is better)
-            brier_original = brier_score_loss(
-                self.y_test,
-                self.results[model_name]['y_pred_proba']
-            )
-            brier_calibrated = brier_score_loss(self.y_test, y_pred_proba_calib)
-            
-            roc_auc_calib = roc_auc_score(self.y_test, y_pred_proba_calib)
+            if self.is_multiclass:
+                y_pred_proba_calib = calibrated.predict_proba(self.X_test)
+                brier_original = np.nan
+                brier_calibrated = np.nan
+                roc_auc_calib = roc_auc_score(self.y_test, y_pred_proba_calib, multi_class='ovr')
+            else:
+                y_pred_proba_calib = calibrated.predict_proba(self.X_test)[:, 1]
+                brier_original = brier_score_loss(self.y_test, self.results[model_name]['y_pred_proba'])
+                brier_calibrated = brier_score_loss(self.y_test, y_pred_proba_calib)
+                roc_auc_calib = roc_auc_score(self.y_test, y_pred_proba_calib)
             
             print(f"  ✓ Original Brier Score: {brier_original:.4f}")
             print(f"  ✓ Calibrated Brier Score: {brier_calibrated:.4f}")
