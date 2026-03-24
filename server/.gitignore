@@ -52,6 +52,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
-
+data/models
 # Gunicorn
 gunicorn.pid

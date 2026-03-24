@@ -17,12 +17,21 @@ from sklearn.model_selection import (
     train_test_split, cross_val_score, StratifiedKFold,
     GridSearchCV, RandomizedSearchCV
 )
-from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, RobustScaler
+from sklearn.compose import ColumnTransformer
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, confusion_matrix, classification_report,
     roc_curve, precision_recall_curve, brier_score_loss
 )
+
+# Imbalanced Learning
+try:
+    from imblearn.over_sampling import SMOTE
+    IMBLEarn_AVAILABLE = True
+except ImportError:
+    IMBLEarn_AVAILABLE = False
+    print("Warning: imbalanced-learn not available. Install with: pip install imbalanced-learn")
 
 # Baseline Models
 from sklearn.linear_model import LogisticRegression
@@ -105,7 +114,7 @@ class CKDModelTrainer:
         
         # Load cleaned data
         self.df = pd.read_csv(self.data_path)
-        print(f"\n✓ Loaded dataset: {self.df.shape[0]} rows × {self.df.shape[1]} columns")
+        print(f"\n[OK] Loaded dataset: {self.df.shape[0]} rows x {self.df.shape[1]} columns")
         
         # Separate features and target
         if 'classification' not in self.df.columns:
@@ -114,41 +123,44 @@ class CKDModelTrainer:
         X = self.df.drop(['classification', 'id'], axis=1, errors='ignore')
         y = self.df['classification']
         
-        print(f"\n📊 Target distribution:")
+        print(f"\n[STATS] Target distribution:")
         print(y.value_counts())
         print(f"\n  Class balance: {(y.value_counts() / len(y) * 100).round(2).to_dict()}")
         
         # Encode categorical features
-        print(f"\n🔧 Encoding categorical features...")
+        print(f"\n[PROC] Encoding categorical features...")
         categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
+        numeric_cols = X.select_dtypes(exclude=['object']).columns.tolist()
         
-        # Try to convert numeric-like strings to numbers first
-        for col in X.columns:
-            if X[col].dtype == 'object':
-                try:
-                    # Try to convert to numeric
-                    X[col] = pd.to_numeric(X[col], errors='ignore')
-                except:
-                    pass
+        if categorical_cols:
+            print(f"  - Using OneHotEncoder for: {categorical_cols}")
+            # Use OneHotEncoder for categorical features (more medically sound than LabelEncoder)
+            ct = ColumnTransformer(
+                transformers=[
+                    ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_cols)
+                ],
+                remainder='passthrough'
+            )
+            X_encoded = ct.fit_transform(X)
+            
+            # Get new feature names after One-Hot Encoding
+            cat_feature_names = ct.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
+            self.feature_names = cat_feature_names + numeric_cols
+            X = pd.DataFrame(X_encoded, columns=self.feature_names)
+            self.preprocessor = ct
+        else:
+            self.feature_names = X.columns.tolist()
+            self.preprocessor = None
         
-        # Re-identify categorical columns after numeric conversion
-        categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
+        # Store feature names
+        print(f"\n[OK] Total features after encoding: {len(self.feature_names)}")
         
-        for col in categorical_cols:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
-            self.label_encoders[col] = le
-            print(f"  - Encoded '{col}': {len(le.classes_)} unique values")
-        
-        # Encode target variable
+        # Encode target variable (LabelEncoder is still fine for target)
+        from sklearn.preprocessing import LabelEncoder
         le_target = LabelEncoder()
         y = le_target.fit_transform(y)
         self.label_encoders['target'] = le_target
-        print(f"\n  - Target classes: {le_target.classes_}")
-        
-        # Store feature names
-        self.feature_names = X.columns.tolist()
-        print(f"\n✓ Total features: {len(self.feature_names)}")
+        print(f"  - Target classes: {le_target.classes_}")
         
         # Convert to numpy arrays
         self.X = X.values
@@ -157,7 +169,7 @@ class CKDModelTrainer:
         
         # Check for NaN values and handle them
         if np.isnan(self.X).any():
-            print(f"\n⚠️  Found {np.isnan(self.X).sum()} NaN values - filling with 0")
+            print(f"\n[WARNING] Found {np.isnan(self.X).sum()} NaN values - filling with 0")
             self.X = np.nan_to_num(self.X, nan=0.0)
         
         return self
@@ -177,7 +189,7 @@ class CKDModelTrainer:
             stratify=stratify_param
         )
         
-        print(f"\n✓ Data split completed:")
+        print(f"\n[OK] Data split completed:")
         print(f"  - Training set: {self.X_train.shape[0]} samples ({(1-test_size)*100:.0f}%)")
         print(f"  - Test set: {self.X_test.shape[0]} samples ({test_size*100:.0f}%)")
         print(f"\n  Training set class distribution:")
@@ -190,6 +202,7 @@ class CKDModelTrainer:
     def scale_features(self, method='robust'):
         """
         Scale numerical features.
+        Note: Tree models don't strictly require scaling, but it's kept for models like LR and MLP.
         
         Args:
             method (str): 'standard' or 'robust' scaling
@@ -200,16 +213,38 @@ class CKDModelTrainer:
         
         if method == 'robust':
             self.scaler = RobustScaler()
-            print("\n🔧 Using RobustScaler (better for outliers in medical data)")
+            print("\n[PROC] Using RobustScaler (better for outliers in medical data)")
         else:
             self.scaler = StandardScaler()
-            print("\n🔧 Using StandardScaler")
+            print("\n[PROC] Using StandardScaler")
         
         self.X_train = self.scaler.fit_transform(self.X_train)
         self.X_test = self.scaler.transform(self.X_test)
         
-        print("✓ Features scaled successfully")
+        print("[OK] Features scaled successfully")
         
+        return self
+
+    def handle_imbalance(self):
+        """Handle class imbalance using SMOTE."""
+        if not IMBLEarn_AVAILABLE:
+            print("\n[WARNING] imbalanced-learn not available. Skipping SMOTE...")
+            return self
+            
+        print("\n" + "=" * 80)
+        print("HANDLING CLASS IMBALANCE (SMOTE)")
+        print("=" * 80)
+        
+        # Determine sampling strategy based on class distribution
+        # SMOTE works best when Applied after scaling but before training
+        smote = SMOTE(random_state=self.random_state)
+        self.X_train, self.y_train = smote.fit_resample(self.X_train, self.y_train)
+        
+        print(f"[OK] SMOTE applied. New training set size: {self.X_train.shape[0]}")
+        unique, counts = np.unique(self.y_train, return_counts=True)
+        for cls, cnt in zip(unique, counts):
+            print(f"    Class {cls}: {cnt}")
+            
         return self
     
     def train_logistic_regression(self, use_cv=False):
@@ -219,7 +254,7 @@ class CKDModelTrainer:
         print("=" * 80)
         
         if use_cv:
-            print("\n🔍 Using GridSearchCV for hyperparameter tuning...")
+            print("\n[SEARCH] Using GridSearchCV for hyperparameter tuning...")
             
             if self.is_multiclass:
                 param_grid = {
@@ -257,8 +292,9 @@ class CKDModelTrainer:
         else:
             model = LogisticRegression(
                 random_state=self.random_state,
-                max_iter=1000,
-                class_weight='balanced'
+                max_iter=2000,
+                class_weight='balanced',
+                solver='lbfgs'
             )
             model.fit(self.X_train, self.y_train)
         
@@ -274,7 +310,7 @@ class CKDModelTrainer:
         print("=" * 80)
         
         if use_cv:
-            print("\n🔍 Using RandomizedSearchCV for hyperparameter tuning...")
+            print("\n[SEARCH] Using RandomizedSearchCV for hyperparameter tuning...")
             
             param_dist = {
                 'n_estimators': [100, 200, 300, 500],
@@ -320,7 +356,7 @@ class CKDModelTrainer:
     def train_xgboost(self, use_cv=False):
         """Train XGBoost classifier."""
         if not XGBOOST_AVAILABLE:
-            print("\n⚠️  XGBoost not available. Skipping...")
+            print("\n[WARNING] XGBoost not available. Skipping...")
             return self
         
         print("\n" + "=" * 80)
@@ -336,7 +372,7 @@ class CKDModelTrainer:
             xgb_kwargs['scale_pos_weight'] = np.sum(self.y_train == 0) / np.sum(self.y_train == 1)
         
         if use_cv:
-            print("\n🔍 Using RandomizedSearchCV for hyperparameter tuning...")
+            print("\n[SEARCH] Using RandomizedSearchCV for hyperparameter tuning...")
             
             param_dist = {
                 'n_estimators': [100, 200, 300],
@@ -368,12 +404,18 @@ class CKDModelTrainer:
             print(f"  ✓ Best CV score (ROC-AUC): {random_search.best_score_:.4f}")
         else:
             model = xgb.XGBClassifier(
-                n_estimators=200,
+                n_estimators=500,  # Increased as we use early stopping
                 max_depth=5,
-                learning_rate=0.1,
+                learning_rate=0.05,
+                early_stopping_rounds=20,
                 **xgb_kwargs
             )
-            model.fit(self.X_train, self.y_train)
+            model.fit(
+                self.X_train, 
+                self.y_train,
+                eval_set=[(self.X_test, self.y_test)],
+                verbose=False
+            )
         
         self.models['XGBoost'] = model
         self._evaluate_model('XGBoost', model)
@@ -383,7 +425,7 @@ class CKDModelTrainer:
     def train_lightgbm(self, use_cv=False):
         """Train LightGBM classifier."""
         if not LIGHTGBM_AVAILABLE:
-            print("\n⚠️  LightGBM not available. Skipping...")
+            print("\n[WARNING] LightGBM not available. Skipping...")
             return self
         
         print("\n" + "=" * 80)
@@ -391,7 +433,7 @@ class CKDModelTrainer:
         print("=" * 80)
         
         if use_cv:
-            print("\n🔍 Using RandomizedSearchCV for hyperparameter tuning...")
+            print("\n[SEARCH] Using RandomizedSearchCV for hyperparameter tuning...")
             
             param_dist = {
                 'n_estimators': [100, 200, 300],
@@ -442,7 +484,7 @@ class CKDModelTrainer:
     def train_mlp(self, use_cv=False):
         """Train Multi-Layer Perceptron (Neural Network)."""
         if not MLP_AVAILABLE:
-            print("\n⚠️  MLP not available. Skipping...")
+            print("\n[WARNING] MLP not available. Skipping...")
             return self
         
         print("\n" + "=" * 80)
@@ -450,7 +492,7 @@ class CKDModelTrainer:
         print("=" * 80)
         
         if use_cv:
-            print("\n🔍 Using GridSearchCV for hyperparameter tuning...")
+            print("\n[SEARCH] Using GridSearchCV for hyperparameter tuning...")
             
             param_grid = {
                 'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50)],
@@ -527,7 +569,7 @@ class CKDModelTrainer:
         }
         
         # Print results
-        print(f"\n📊 Test Set Performance:")
+        print(f"\n[STATS] Test Set Performance:")
         print(f"  - Accuracy:  {accuracy:.4f}")
         print(f"  - Precision: {precision:.4f}")
         print(f"  - Recall:    {recall:.4f}")
@@ -535,9 +577,40 @@ class CKDModelTrainer:
         print(f"  - ROC-AUC:   {roc_auc:.4f}")
         
         print(f"\n  Confusion Matrix:")
-        cm = confusion_matrix(self.y_test, y_pred)
-        print(f"    TN: {cm[0][0]:3d}  FP: {cm[0][1]:3d}")
-        print(f"    FN: {cm[1][0]:3d}  TP: {cm[1][1]:3d}")
+        print(confusion_matrix(self.y_test, y_pred))
+        print("\n  Classification Report:")
+        print(classification_report(self.y_test, y_pred))
+
+    def show_feature_importance(self, model_name="Random Forest"):
+        """Show feature importance for a given model."""
+        if model_name not in self.models:
+            print(f"⚠️ Model {model_name} not found")
+            return
+            
+        model = self.models[model_name]
+        
+        # Check if model has feature_importances_ or coef_
+        if hasattr(model, 'feature_importances_'):
+            importance = model.feature_importances_
+        elif hasattr(model, 'coef_'):
+            # For Linear models, use absolute coefficients
+            if self.is_multiclass:
+                importance = np.mean(np.abs(model.coef_), axis=0)
+            else:
+                importance = np.abs(model.coef_[0])
+        else:
+            print(f"  ℹ️ {model_name} does not support direct feature importance.")
+            return
+
+        imp_df = pd.DataFrame({
+            "feature": self.feature_names,
+            "importance": importance
+        }).sort_values("importance", ascending=False)
+
+        print(f"\n[STAR] TOP 10 FEATURES ({model_name}):")
+        print(imp_df.head(10).to_string(index=False))
+        
+        return imp_df
     
     def calibrate_models(self, method='isotonic', cv=5):
         """
@@ -550,10 +623,10 @@ class CKDModelTrainer:
         print("\n" + "=" * 80)
         print(f"MODEL CALIBRATION ({method.upper()})")
         print("=" * 80)
-        print("\n💡 Calibrating probabilities for clinical decision-making...")
+        print("\n[INFO] Calibrating probabilities for clinical decision-making...")
         
         for model_name, model in self.models.items():
-            print(f"\n🔧 Calibrating {model_name}...")
+            print(f"\n[PROC] Calibrating {model_name}...")
             
             # Create calibrated classifier
             calibrated = CalibratedClassifierCV(
@@ -579,9 +652,9 @@ class CKDModelTrainer:
                 brier_calibrated = brier_score_loss(self.y_test, y_pred_proba_calib)
                 roc_auc_calib = roc_auc_score(self.y_test, y_pred_proba_calib)
             
-            print(f"  ✓ Original Brier Score: {brier_original:.4f}")
-            print(f"  ✓ Calibrated Brier Score: {brier_calibrated:.4f}")
-            print(f"  ✓ Calibrated ROC-AUC: {roc_auc_calib:.4f}")
+            print(f"  [OK] Original Brier Score: {brier_original:.4f}")
+            print(f"  [OK] Calibrated Brier Score: {brier_calibrated:.4f}")
+            print(f"  [OK] Calibrated ROC-AUC: {roc_auc_calib:.4f}")
             
             # Store calibrated model
             self.calibrated_models[model_name] = {
@@ -590,7 +663,7 @@ class CKDModelTrainer:
                 'roc_auc': roc_auc_calib
             }
         
-        print("\n✓ All models calibrated successfully")
+        print("\n[OK] All models calibrated successfully")
         
         return self
     
@@ -615,14 +688,14 @@ class CKDModelTrainer:
         df_comparison = pd.DataFrame(comparison_data)
         df_comparison = df_comparison.sort_values('ROC-AUC', ascending=False)
         
-        print("\n📊 Model Performance Summary:")
+        print("\n[STATS] Model Performance Summary:")
         print(df_comparison.to_string(index=False))
         
         # Find best model
         best_model = df_comparison.iloc[0]['Model']
         best_auc = df_comparison.iloc[0]['ROC-AUC']
         
-        print(f"\n🏆 Best Model: {best_model} (ROC-AUC: {best_auc:.4f})")
+        print(f"\n[BEST] Best Model: {best_model} (ROC-AUC: {best_auc:.4f})")
         
         return df_comparison
     
@@ -650,7 +723,7 @@ class CKDModelTrainer:
             
             with open(filepath, 'wb') as f:
                 pickle.dump(model, f)
-            print(f"  ✓ Saved {model_name} to {filename}")
+            print(f"  [OK] Saved {model_name} to {filename}")
         
         # Save calibrated models
         for model_name, calib_dict in self.calibrated_models.items():
@@ -659,7 +732,7 @@ class CKDModelTrainer:
             
             with open(filepath, 'wb') as f:
                 pickle.dump(calib_dict['model'], f)
-            print(f"  ✓ Saved calibrated {model_name} to {filename}")
+            print(f"  [OK] Saved calibrated {model_name} to {filename}")
         
         # Save preprocessing objects
         preprocessing = {
@@ -671,7 +744,7 @@ class CKDModelTrainer:
         preprocess_file = os.path.join(output_dir, f'preprocessing_{timestamp}.pkl')
         with open(preprocess_file, 'wb') as f:
             pickle.dump(preprocessing, f)
-        print(f"  ✓ Saved preprocessing objects")
+        print(f"  [OK] Saved preprocessing objects")
         
         # Save results as JSON
         results_serializable = {}
@@ -687,9 +760,9 @@ class CKDModelTrainer:
         results_file = os.path.join(output_dir, f'results_{timestamp}.json')
         with open(results_file, 'w') as f:
             json.dump(results_serializable, f, indent=2)
-        print(f"  ✓ Saved results to results_{timestamp}.json")
+        print(f"  [OK] Saved results to results_{timestamp}.json")
         
-        print(f"\n✓ All models saved to: {output_dir}")
+        print(f"\n[OK] All models saved to: {output_dir}")
         
         return self
     
@@ -702,14 +775,15 @@ class CKDModelTrainer:
             use_cv (bool): Whether to use cross-validation for hyperparameter tuning
             calibrate (bool): Whether to calibrate model probabilities
         """
-        print("\n" + "🧠" * 40)
+        print("\n" + "=" * 80)
         print("CHRONIC KIDNEY DISEASE MODEL TRAINING PIPELINE")
-        print("🧠" * 40)
+        print("=" * 80)
         
         # Prepare data
         self.load_and_prepare_data()
         self.split_data(test_size=0.2, stratify=True)
         self.scale_features(method='robust')
+        self.handle_imbalance()
         
         # Train models
         if models_to_train == 'all':
@@ -720,12 +794,15 @@ class CKDModelTrainer:
         
         if 'rf' in models_to_train:
             self.train_random_forest(use_cv=use_cv)
+            self.show_feature_importance('Random Forest')
         
         if 'xgb' in models_to_train:
             self.train_xgboost(use_cv=use_cv)
+            self.show_feature_importance('XGBoost')
         
         if 'lgb' in models_to_train:
             self.train_lightgbm(use_cv=use_cv)
+            self.show_feature_importance('LightGBM')
         
         if 'mlp' in models_to_train:
             self.train_mlp(use_cv=False)  # MLP CV is slow
@@ -741,7 +818,7 @@ class CKDModelTrainer:
         self.save_models()
         
         print("\n" + "=" * 80)
-        print("✅ TRAINING PIPELINE COMPLETED SUCCESSFULLY!")
+        print(" [OK] TRAINING PIPELINE COMPLETED SUCCESSFULLY!")
         print("=" * 80)
         
         return self
@@ -767,7 +844,7 @@ def main():
         calibrate=True  # Calibrate probabilities for clinical use
     )
     
-    print("\n💡 Next Steps:")
+    print("\n[INFO] Next Steps:")
     print("  - Review model performance metrics")
     print("  - Analyze feature importance")
     print("  - Validate on external dataset if available")

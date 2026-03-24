@@ -26,34 +26,59 @@ logger = logging.getLogger(__name__)
 
 # Global predictors - one for each model type
 predictors = {}
-current_model = 'logistic_regression'
+current_model = 'random_forest'
 
-# Available models configuration
+# Available models configuration (matches model_training_v2.py output)
 AVAILABLE_MODELS = {
-    # 'random_forest': {
-    #     'name': 'Random Forest',
-    #     'type': 'random_forest',
-    #     'description': 'Ensemble tree model supporting multiclass classification'
-    # },
     'logistic_regression': {
         'name': 'Logistic Regression',
         'type': 'logistic_regression',
-        'description': 'Linear model with probability calibration'
+        'description': 'Linear model with L2 regularization and balanced class weights'
+    },
+    'decision_tree': {
+        'name': 'Decision Tree',
+        'type': 'decision_tree',
+        'description': 'Interpretable tree-based classifier with depth limiting'
+    },
+    'random_forest': {
+        'name': 'Random Forest',
+        'type': 'random_forest',
+        'description': 'Ensemble of decision trees with bagging for robust predictions'
+    },
+    'gradient_boosting': {
+        'name': 'Gradient Boosting',
+        'type': 'gradient_boosting',
+        'description': 'Sequential boosting with gradient descent optimization'
+    },
+    'svm_svc': {
+        'name': 'SVM (SVC)',
+        'type': 'svm_svc',
+        'description': 'Support Vector Machine with RBF kernel for non-linear boundaries'
+    },
+    'k-nearest_neighbors': {
+        'name': 'K-Nearest Neighbors',
+        'type': 'k-nearest_neighbors',
+        'description': 'Instance-based learning using 7 nearest neighbors'
+    },
+    'gaussian_naive_bayes': {
+        'name': 'Gaussian Naive Bayes',
+        'type': 'gaussian_naive_bayes',
+        'description': 'Probabilistic classifier assuming Gaussian feature distributions'
+    },
+    'mlp_neural_network': {
+        'name': 'MLP Neural Network',
+        'type': 'mlp_neural_network',
+        'description': 'Multi-layer perceptron neural network with early stopping'
     },
     'xgboost': {
         'name': 'XGBoost',
         'type': 'xgboost',
-        'description': 'Optimized distributed gradient boosting library'
+        'description': 'Extreme Gradient Boosting with parallel tree construction'
     },
-    'lightgbm': {
-        'name': 'LightGBM',
-        'type': 'lightgbm',
-        'description': 'Light Gradient Boosting Machine supporting high efficiency'
-    },
-    'mlp': {
-        'name': 'Multi-Layer Perceptron',
-        'type': 'mlp',
-        'description': 'Neural network supporting complex non-linear relations'
+    'catboost': {
+        'name': 'CatBoost',
+        'type': 'catboost',
+        'description': 'Gradient boosting optimized for categorical features'
     }
 }
 
@@ -75,10 +100,10 @@ def initialize_predictor(model_type='random_forest', use_calibrated=True):
             model_type=model_type,
             use_calibrated=use_calibrated
         )
-        logger.info(f"✓ Model loaded successfully: {predictor.model_name}")
+        logger.info(f"[OK] Model loaded successfully: {predictor.model_name}")
         return predictor
     except Exception as e:
-        logger.error(f"❌ Failed to load model {model_type}: {e}")
+        logger.error(f"[ERR] Failed to load model {model_type}: {e}")
         return None
 
 
@@ -99,9 +124,9 @@ def initialize_all_models():
     predictor = initialize_predictor(model_config['type'], use_calibrated=True)
     if predictor:
         predictors[default_model] = predictor
-        logger.info(f"✓ {model_config['name']} ready")
+        logger.info(f"[OK] {model_config['name']} ready")
     else:
-        logger.warning(f"⚠ {model_config['name']} failed to load")
+        logger.warning(f"[WARN] {model_config['name']} failed to load")
     
     # Set default model
     if 'random_forest' in predictors:
@@ -109,8 +134,8 @@ def initialize_all_models():
     elif predictors:
         current_model = list(predictors.keys())[0]
     
-    logger.info(f"✓ Initialized {len(predictors)} models (limited for memory)")
-    logger.info(f"✓ Current model: {current_model}")
+    logger.info(f"[OK] Initialized {len(predictors)} models (limited for memory)")
+    logger.info(f"[OK] Current model: {current_model}")
 
 
 def get_current_predictor():
@@ -372,7 +397,7 @@ def home():
     """Home page with API documentation."""
     predictor = get_current_predictor()
     status_class = "ok" if predictor else "error"
-    status_message = f"✓ API is running with {len(predictors)}/{len(AVAILABLE_MODELS)} models loaded" if predictors else "❌ No models loaded"
+    status_message = f"API is running with {len(predictors)}/{len(AVAILABLE_MODELS)} models loaded" if predictors else "No models loaded"
     model_name = predictor.model_name if predictor else "Not loaded"
     
     return render_template_string(
@@ -457,11 +482,14 @@ def predict():
         }), 400
         
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"Prediction error:\n{tb}")
         return jsonify({
             'success': False,
             'error': 'Prediction failed',
-            'details': str(e)
+            'details': str(e),
+            'traceback': tb
         }), 500
 
 
@@ -739,17 +767,17 @@ def internal_error(error):
 
 if __name__ == '__main__':
     print("\n" + "=" * 60)
-    print("🏥 CKD PREDICTION API SERVER")
+    print("[CKD] PREDICTION API SERVER")
     print("=" * 60)
-    print(f"\n✓ Loaded Models: {len(predictors)}/{len(AVAILABLE_MODELS)}")
+    print(f"\n[OK] Loaded Models: {len(predictors)}/{len(AVAILABLE_MODELS)}")
     for model_key, predictor in predictors.items():
-        print(f"   - {AVAILABLE_MODELS[model_key]['name']}: ✓")
-    print(f"\n✓ Current Model: {AVAILABLE_MODELS[current_model]['name']}")
-    print(f"✓ Status: {'Ready' if predictors else 'Error - No models loaded'}")
-    print("\n📡 Starting Flask server...")
+        print(f"   - {AVAILABLE_MODELS[model_key]['name']}: OK")
+    print(f"\n[OK] Current Model: {AVAILABLE_MODELS[current_model]['name']}")
+    print(f"[OK] Status: {'Ready' if predictors else 'Error - No models loaded'}")
+    print("\n[>>] Starting Flask server...")
     print("   URL: http://localhost:5000")
     print("   Documentation: http://localhost:5000")
-    print("\n💡 Press CTRL+C to stop the server\n")
+    print("\n[TIP] Press CTRL+C to stop the server\n")
     print("=" * 60 + "\n")
     
     # Run Flask app

@@ -35,49 +35,94 @@ class CKDPredictor:
         Load a trained model.
         
         Args:
-            model_type (str): 'logistic_regression', 'random_forest', or 'xgboost'
-            use_calibrated (bool): Whether to use calibrated version
+            model_type (str): Model type matching the pickle filename prefix
+            use_calibrated (bool): Whether to try calibrated version first
         """
-        # Find latest model file
-        pattern = f"{model_type}{'_calibrated' if use_calibrated else ''}_*.pkl"
-        model_files = glob.glob(os.path.join(self.model_dir, pattern))
+        # Find latest model file - try calibrated first, then uncalibrated
+        model_files = []
+        if use_calibrated:
+            pattern = f"{model_type}_calibrated_*.pkl"
+            model_files = glob.glob(os.path.join(self.model_dir, pattern))
         
         if not model_files:
-            raise FileNotFoundError(f"No model found matching pattern: {pattern}")
+            # Fallback to non-calibrated (V2 models are not calibrated)
+            pattern = f"{model_type}_*.pkl"
+            model_files = glob.glob(os.path.join(self.model_dir, pattern))
+            # Exclude preprocessing files
+            model_files = [f for f in model_files if 'preprocessing' not in f and 'results' not in f]
+        
+        if not model_files:
+            raise FileNotFoundError(f"No model found matching type: {model_type}")
         
         model_path = sorted(model_files)[-1]  # Get latest
+        model_basename = os.path.basename(model_path)
         
-        print(f"\n📦 Loading model from: {os.path.basename(model_path)}")
+        print(f"\n[LOAD] Loading model from: {model_basename}")
         
         with open(model_path, 'rb') as f:
             self.model = pickle.load(f)
         
         self.model_name = model_type.replace('_', ' ').title()
-        if use_calibrated:
+        if 'calibrated' in model_path:
             self.model_name += " (Calibrated)"
         
-        # Load preprocessing
-        preprocessing_files = glob.glob(os.path.join(self.model_dir, 'preprocessing_*.pkl'))
-        if preprocessing_files:
-            preprocessing_path = sorted(preprocessing_files)[-1]
+        # Extract timestamp from model filename to match preprocessing
+        # Filenames look like: random_forest_20260324_115420.pkl
+        import re
+        ts_match = re.search(r'(\d{8}_\d{6})\.pkl$', model_basename)
+        model_timestamp = ts_match.group(1) if ts_match else None
+        
+        # Load matching preprocessing
+        self._load_preprocessing(model_timestamp)
+        
+        print(f"[OK] Model loaded: {self.model_name}")
+        
+        return self
+    
+    def _load_preprocessing(self, model_timestamp=None):
+        """Load preprocessing artefacts matching the model's training run.
+        
+        Args:
+            model_timestamp: The timestamp string from the model filename (e.g. '20260324_115420').
+                           If provided, tries to find preprocessing with matching timestamp first.
+        """
+        preprocessing_path = None
+        
+        if model_timestamp:
+            # Try exact timestamp match first (V2 then V1)
+            v2_exact = os.path.join(self.model_dir, f'preprocessing_v2_{model_timestamp}.pkl')
+            v1_exact = os.path.join(self.model_dir, f'preprocessing_{model_timestamp}.pkl')
+            
+            if os.path.exists(v2_exact):
+                preprocessing_path = v2_exact
+            elif os.path.exists(v1_exact):
+                preprocessing_path = v1_exact
+        
+        # Fallback: find the latest preprocessing file
+        if preprocessing_path is None:
+            v2_files = glob.glob(os.path.join(self.model_dir, 'preprocessing_v2_*.pkl'))
+            v1_files = glob.glob(os.path.join(self.model_dir, 'preprocessing_*.pkl'))
+            v1_files = [f for f in v1_files if '_v2_' not in f]
+            
+            all_files = v2_files + v1_files
+            if all_files:
+                preprocessing_path = sorted(all_files)[-1]
+        
+        if preprocessing_path:
             with open(preprocessing_path, 'rb') as f:
                 self.preprocessing = pickle.load(f)
-            print(f"✓ Loaded preprocessing from: {os.path.basename(preprocessing_path)}")
+            print(f"[OK] Loaded preprocessing from: {os.path.basename(preprocessing_path)}")
             
-            # Extract feature names if available
+            # Extract feature names
             if 'feature_names' in self.preprocessing:
                 self.feature_names = self.preprocessing['feature_names']
             elif 'label_encoders' in self.preprocessing:
-                # Get feature names from encoders (excluding target)
                 self.feature_names = [k for k in self.preprocessing['label_encoders'].keys() if k != 'target']
-        
-        print(f"✓ Model loaded: {self.model_name}")
-        
-        return self
     
     def preprocess_input(self, data):
         """
         Preprocess input data for prediction.
+        Supports both V1 (LabelEncoder per column) and V2 (ColumnTransformer) formats.
         
         Args:
             data (pd.DataFrame or dict): Input features
@@ -102,30 +147,93 @@ class CKDPredictor:
                 except:
                     pass
         
-        # Encode categorical features
-        if self.preprocessing and 'label_encoders' in self.preprocessing:
-            categorical_cols = data.select_dtypes(include=['object']).columns
-            
-            for col in categorical_cols:
-                if col in self.preprocessing['label_encoders']:
-                    le = self.preprocessing['label_encoders'][col]
-                    # Handle unknown categories
-                    data[col] = data[col].apply(
-                        lambda x: x if x in le.classes_ else le.classes_[0]
-                    )
-                    data[col] = le.transform(data[col])
+        # ── V2 format: ColumnTransformer (OneHotEncoder) ──
+        if self.preprocessing and 'preprocessor' in self.preprocessing and self.preprocessing['preprocessor'] is not None:
+            print("[DEBUG] Using V2 preprocessor (ColumnTransformer) branch")
+            ct = self.preprocessing['preprocessor']
+            X = ct.transform(data)
+            X = np.nan_to_num(X, nan=0.0)
         
-        # Convert to numpy
-        X = data.values
+        # ── V1 format: feature_names have OneHot patterns (rbc_normal, htn_yes, etc.) ──
+        elif self.feature_names and any('_' in fn for fn in self.feature_names[:30]):
+            print("[DEBUG] Using V1 manual one-hot branch. Features:", self.feature_names[:5])
+            # Manually reconstruct one-hot encoding from feature names
+            X = self._manual_onehot_encode(data)
+            X = np.nan_to_num(X, nan=0.0)
         
-        # Handle NaN
-        X = np.nan_to_num(X, nan=0.0)
+        else:
+            print("[DEBUG] Using fallback raw values branch")
+            X = data.values
+            X = np.nan_to_num(X, nan=0.0)
         
         # Scale features
-        if self.preprocessing and 'scaler' in self.preprocessing:
+        if self.preprocessing and 'scaler' in self.preprocessing and self.preprocessing['scaler'] is not None:
             X = self.preprocessing['scaler'].transform(X)
         
         return X
+    
+    def _manual_onehot_encode(self, data):
+        """Manually reconstruct one-hot encoding based on feature_names.
+        
+        V1 preprocessing has feature_names like:
+            ['rbc_abnormal', 'rbc_normal', 'rbc_nan', ..., 'age', 'bp', ...]
+        We detect categorical groups (e.g. rbc_*) and create one-hot columns,
+        then append numeric columns in the correct order.
+        """
+        result = np.zeros((len(data), len(self.feature_names)), dtype=float)
+        
+        # Identify raw categorical and numeric columns from data
+        cat_cols = data.select_dtypes(include=['object']).columns.tolist()
+        num_cols = data.select_dtypes(exclude=['object']).columns.tolist()
+        
+        for row_idx in range(len(data)):
+            for feat_idx, feat_name in enumerate(self.feature_names):
+                # Check if this is a one-hot encoded feature (contains _)
+                # Pattern: {col}_{value}  e.g. rbc_normal, htn_yes, pcc_notpresent
+                matched = False
+                
+                for cat_col in cat_cols:
+                    if feat_name.startswith(cat_col + '_'):
+                        suffix = feat_name[len(cat_col) + 1:]  # e.g. 'normal', 'yes', 'nan'
+                        raw_val = str(data.iloc[row_idx][cat_col]).strip().lower()
+                        
+                        if suffix == 'nan' and (raw_val == '' or raw_val == 'nan'):
+                            result[row_idx, feat_idx] = 1.0
+                        elif raw_val == suffix.lower():
+                            result[row_idx, feat_idx] = 1.0
+                        matched = True
+                        break
+                
+                if not matched and feat_name in num_cols:
+                    # This is a numeric column
+                    try:
+                        result[row_idx, feat_idx] = float(data.iloc[row_idx][feat_name])
+                    except (ValueError, TypeError):
+                        result[row_idx, feat_idx] = 0.0
+                elif not matched and feat_name in data.columns:
+                    # Try to get numeric value from column
+                    try:
+                        result[row_idx, feat_idx] = float(data.iloc[row_idx][feat_name])
+                    except (ValueError, TypeError):
+                        result[row_idx, feat_idx] = 0.0
+        
+        return result
+    
+    def _get_class_names(self):
+        """Get class names from preprocessing (supports V1 and V2)."""
+        if self.preprocessing:
+            # V2: class_names stored directly
+            if 'class_names' in self.preprocessing:
+                return self.preprocessing['class_names']
+            # V2: label_encoder (single)
+            if 'label_encoder' in self.preprocessing:
+                return list(self.preprocessing['label_encoder'].classes_)
+            # V1: label_encoders dict with 'target' key
+            if 'label_encoders' in self.preprocessing:
+                target_encoder = self.preprocessing['label_encoders'].get('target')
+                if target_encoder:
+                    return list(target_encoder.classes_)
+        return [f'Class {i}' for i in range(5)]
     
     def predict(self, data, return_proba=True):
         """
@@ -165,15 +273,8 @@ class CKDPredictor:
         """
         predictions, probabilities = self.predict(patient_data, return_proba=True)
         
-        # Get class names
-        if self.preprocessing and 'label_encoders' in self.preprocessing:
-            target_encoder = self.preprocessing['label_encoders'].get('target')
-            if target_encoder:
-                class_names = target_encoder.classes_
-            else:
-                class_names = ['Class 0', 'Class 1']
-        else:
-            class_names = ['Class 0', 'Class 1']
+        # Get class names - supports V1 and V2 preprocessing formats
+        class_names = self._get_class_names()
         
         predicted_class = predictions[0]
         predicted_label = class_names[predicted_class]
@@ -182,11 +283,16 @@ class CKDPredictor:
         for i, cls_name in enumerate(class_names):
             # Normalizing the class name to be snake_case
             prob_key = str(cls_name).lower().replace(' ', '_')
+            if prob_key == 'notckd':
+                prob_key = 'not_ckd'
             prob_dict[prob_key] = float(probabilities[0][i])
             
+        # Frontend expects 'ckd' to be class 1 and 'notckd' to be class 0
+        normalized_class = 1 if str(predicted_label).lower() == 'ckd' else 0
+        
         results = {
             'prediction': predicted_label,
-            'predicted_class': int(predicted_class),
+            'predicted_class': normalized_class,
             'probabilities': prob_dict,
             'confidence': float(max(probabilities[0])),
             'model': self.model_name
@@ -302,26 +408,16 @@ def batch_predict_from_csv(csv_path, predictor=None):
     df['confidence'] = probabilities.max(axis=1)
     
     # Get class labels for probabilities
-    if predictor.preprocessing and 'label_encoders' in predictor.preprocessing:
-        target_encoder = predictor.preprocessing['label_encoders'].get('target')
-        if target_encoder:
-            class_names = target_encoder.classes_
-            for i, cls_name in enumerate(class_names):
-                prob_key = f"probability_{str(cls_name).lower().replace(' ', '_')}"
-                df[prob_key] = probabilities[:, i]
-    else:
-        # Fallback if no encoder
-        for i in range(probabilities.shape[1]):
-            df[f'probability_class_{i}'] = probabilities[:, i]
+    class_names = predictor._get_class_names()
+    for i, cls_name in enumerate(class_names):
+        prob_key = f"probability_{str(cls_name).lower().replace(' ', '_')}"
+        df[prob_key] = probabilities[:, i]
     
-    # Get class labels
-    if predictor.preprocessing and 'label_encoders' in predictor.preprocessing:
-        target_encoder = predictor.preprocessing['label_encoders'].get('target')
-        if target_encoder:
-            df['prediction'] = target_encoder.inverse_transform(predictions)
+    # Get class labels as text
+    df['prediction'] = [class_names[p] for p in predictions]
     
-    print(f"✓ Predictions complete!")
-    print(f"\n📊 Prediction Summary:")
+    print(f"[OK] Predictions complete!")
+    print(f"\nPrediction Summary:")
     print(df['prediction'].value_counts())
     
     return df
