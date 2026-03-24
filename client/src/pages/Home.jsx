@@ -74,7 +74,6 @@ const Home = () => {
         body: JSON.stringify(formData),
       });
       const data = await response.json();
-      console.log(data);
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Prediction failed");
       }

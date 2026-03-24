@@ -73,7 +73,7 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
 
       if (data.success) {
         setCurrentModel(modelId);
-        
+
         // Notify parent component
         if (onModelChange) {
           onModelChange(modelId, data.model_name);
@@ -92,9 +92,9 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
     if (!perf) return null;
     return {
       accuracy: (perf.accuracy * 100).toFixed(1),
-      precision: (perf.precision * 100).toFixed(1),
-      recall: (perf.recall * 100).toFixed(1),
-      f1: (perf.f1_score * 100).toFixed(1),
+      precision: (perf.precision_macro * 100).toFixed(1),
+      recall: (perf.recall_macro * 100).toFixed(1),
+      f1: (perf.f1_macro * 100).toFixed(1),
       rocAuc: (perf.roc_auc * 100).toFixed(1),
     };
   };
@@ -135,7 +135,9 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
               onClick={fetchModels}
               disabled={loading}
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
         </CardHeader>
@@ -166,7 +168,9 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <Icon className={`h-5 w-5 ${isActive ? "text-blue-600" : "text-gray-600"}`} />
+                        <Icon
+                          className={`h-5 w-5 ${isActive ? "text-blue-600" : "text-gray-600"}`}
+                        />
                         <div>
                           <CardTitle className="text-base">
                             {model.name}
@@ -174,7 +178,10 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                         </div>
                       </div>
                       {isActive && (
-                        <Badge variant="default" className="flex items-center gap-1">
+                        <Badge
+                          variant="default"
+                          className="flex items-center gap-1"
+                        >
                           <CheckCircle2 className="h-3 w-3" />
                           Active
                         </Badge>
@@ -186,27 +193,6 @@ const ModelSelector = ({ apiUrl, onModelChange }) => {
                     <p className="text-xs text-gray-600 mb-3">
                       {model.description}
                     </p>
-
-                    {perf && (
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Accuracy:</span>
-                          <span className="font-semibold">{perf.accuracy}%</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Precision:</span>
-                          <span className="font-semibold">{perf.precision}%</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Recall:</span>
-                          <span className="font-semibold">{perf.recall}%</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">ROC-AUC:</span>
-                          <span className="font-semibold">{perf.rocAuc}%</span>
-                        </div>
-                      </div>
-                    )}
 
                     {!isActive && (
                       <Button
