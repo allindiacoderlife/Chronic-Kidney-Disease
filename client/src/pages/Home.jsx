@@ -818,7 +818,7 @@ const Home = () => {
                             <span className="font-medium">No CKD Risk</span>
                             <span className="font-bold">
                               {(
-                                (prediction.probabilities?.notckd || 0) * 100
+                                (prediction.probabilities?.not_ckd || 0) * 100
                               ).toFixed(1)}
                               %
                             </span>
@@ -827,7 +827,7 @@ const Home = () => {
                             <div
                               className="bg-emerald-400 h-full rounded-full transition-all duration-1000"
                               style={{
-                                width: `${(prediction.probabilities?.notckd || 0) * 100}%`,
+                                width: `${(prediction.probabilities?.not_ckd || 0) * 100}%`,
                               }}
                             ></div>
                           </div>

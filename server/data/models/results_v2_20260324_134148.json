@@ -1,0 +1,83 @@
+{
+  "Logistic Regression": {
+    "accuracy": 0.9875,
+    "cv_mean": 0.985,
+    "cv_std": 0.0062,
+    "precision_macro": 0.9839,
+    "recall_macro": 0.99,
+    "f1_macro": 0.9868,
+    "f1_weighted": 0.9875
+  },
+  "Decision Tree": {
+    "accuracy": 0.95,
+    "cv_mean": 0.965,
+    "cv_std": 0.0128,
+    "precision_macro": 0.9533,
+    "recall_macro": 0.94,
+    "f1_macro": 0.9459,
+    "f1_weighted": 0.9496
+  },
+  "Random Forest": {
+    "accuracy": 1.0,
+    "cv_mean": 0.9975,
+    "cv_std": 0.0035,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "f1_weighted": 1.0
+  },
+  "Gradient Boosting": {
+    "accuracy": 1.0,
+    "cv_mean": 1.0,
+    "cv_std": 0.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "f1_weighted": 1.0
+  },
+  "SVM (SVC)": {
+    "accuracy": 0.925,
+    "cv_mean": 0.925,
+    "cv_std": 0.0,
+    "precision_macro": 0.9156,
+    "recall_macro": 0.9333,
+    "f1_macro": 0.9219,
+    "f1_weighted": 0.9258
+  },
+  "K-Nearest Neighbors": {
+    "accuracy": 0.925,
+    "cv_mean": 0.9276,
+    "cv_std": 0.0174,
+    "precision_macro": 0.9167,
+    "recall_macro": 0.94,
+    "f1_macro": 0.9226,
+    "f1_weighted": 0.926
+  },
+  "Gaussian Naive Bayes": {
+    "accuracy": 0.925,
+    "cv_mean": 0.975,
+    "cv_std": 0.0155,
+    "precision_macro": 0.9345,
+    "recall_macro": 0.9067,
+    "f1_macro": 0.9176,
+    "f1_weighted": 0.9238
+  },
+  "MLP Neural Network": {
+    "accuracy": 0.9625,
+    "cv_mean": 0.9625,
+    "cv_std": 0.0,
+    "precision_macro": 0.9575,
+    "recall_macro": 0.9633,
+    "f1_macro": 0.9603,
+    "f1_weighted": 0.9626
+  },
+  "XGBoost": {
+    "accuracy": 1.0,
+    "cv_mean": 0.995,
+    "cv_std": 0.007,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "f1_weighted": 1.0
+  }
+}

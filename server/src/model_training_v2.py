@@ -113,7 +113,7 @@ class CKDModelTrainerV2:
             n_jobs=-1, random_state=rs
         ),
         'Gradient Boosting': lambda rs: GradientBoostingClassifier(
-            n_estimators=100, learning_rate=0.1,
+            n_estimators=200, learning_rate=0.1,
             max_depth=3, subsample=0.8, random_state=rs
         ),
         'SVM (SVC)': lambda rs: SVC(
@@ -165,6 +165,9 @@ class CKDModelTrainerV2:
         # Separate target
         if 'classification' not in self.df.columns:
             raise ValueError("Target column 'classification' not found in dataset")
+
+        # Clean up the target labels to remove trailing tabs/spaces (e.g. 'ckd\t' -> 'ckd')
+        self.df['classification'] = self.df['classification'].astype(str).str.strip()
 
         X = self.df.drop(columns=['classification', 'id'], errors='ignore')
         y = self.df['classification']
@@ -690,7 +693,7 @@ def main():
     # Path to the RAW kidney disease dataset
     data_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
-        'data', 'raw', 'kidney_disease_dataset.csv'
+        'data', 'raw', 'kidney_disease.csv'
     )
 
     if not os.path.exists(data_path):
