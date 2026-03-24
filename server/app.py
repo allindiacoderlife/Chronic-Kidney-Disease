@@ -75,11 +75,6 @@ AVAILABLE_MODELS = {
         'type': 'xgboost',
         'description': 'Extreme Gradient Boosting with parallel tree construction'
     },
-    'catboost': {
-        'name': 'CatBoost',
-        'type': 'catboost',
-        'description': 'Gradient boosting optimized for categorical features'
-    }
 }
 
 
