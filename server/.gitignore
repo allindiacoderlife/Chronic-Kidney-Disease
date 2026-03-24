@@ -52,6 +52,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
-data/models
+data/models/random_forest_20260324_125646.pkl
 # Gunicorn
 gunicorn.pid
