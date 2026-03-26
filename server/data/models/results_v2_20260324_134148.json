@@ -18,22 +18,22 @@
     "f1_weighted": 0.9496
   },
   "Random Forest": {
-    "accuracy": 1.0,
+    "accuracy": 0.9875,
     "cv_mean": 0.9975,
     "cv_std": 0.0035,
-    "precision_macro": 1.0,
+    "precision_macro": 0.9875,
     "recall_macro": 1.0,
-    "f1_macro": 1.0,
-    "f1_weighted": 1.0
+    "f1_macro": 0.9937,
+    "f1_weighted": 0.9936
   },
   "Gradient Boosting": {
-    "accuracy": 1.0,
+    "accuracy": 0.9875,
     "cv_mean": 1.0,
     "cv_std": 0.0,
-    "precision_macro": 1.0,
+    "precision_macro": 0.9875,
     "recall_macro": 1.0,
-    "f1_macro": 1.0,
-    "f1_weighted": 1.0
+    "f1_macro": 0.9937,
+    "f1_weighted": 0.9936
   },
   "SVM (SVC)": {
     "accuracy": 0.925,
@@ -72,12 +72,12 @@
     "f1_weighted": 0.9626
   },
   "XGBoost": {
-    "accuracy": 1.0,
+    "accuracy": 0.9875,
     "cv_mean": 0.995,
     "cv_std": 0.007,
-    "precision_macro": 1.0,
+    "precision_macro": 0.9875,
     "recall_macro": 1.0,
-    "f1_macro": 1.0,
+    "f1_macro": 0.9937,
     "f1_weighted": 1.0
   }
 }
